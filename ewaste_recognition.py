@@ -24,6 +24,14 @@ from data_processing.utils.user_interface import select_processing_mode, select_
 from data_processing.core.dataset_processor import discover_categories
 from core.dataset import find_mindrecord_files
 
+# 检查是否安装了PyQt5，用于图形界面
+try:
+    from PyQt5.QtWidgets import QApplication
+    from ui.ewaste_ui import EWasteRecognitionUI
+    HAS_GUI = True
+except ImportError:
+    HAS_GUI = False
+
 
 def print_header(title):
     """打印带有分隔线的标题"""
@@ -39,7 +47,12 @@ def check_model_exists():
     Returns:
         bool: 模型文件是否存在
     """
-    return os.path.exists(Config.best_model_path)
+    if os.path.exists(Config.best_model_path):
+        print(f"Found existing model: {Config.best_model_path}")
+        return True
+    else:
+        print("No existing model found. Please train a model first.")
+        return False
 
 
 def select_action():
@@ -53,6 +66,8 @@ def select_action():
     print("\nPlease select an operation:")
     print("1. Train New Model")
     print("2. Recognize E-Waste")
+    if HAS_GUI:
+        print("3. Launch Graphical Interface")
     print("0. Exit Program")
     
     while True:
@@ -61,6 +76,8 @@ def select_action():
             return "train"
         elif choice == "2":
             return "detect"
+        elif choice == "3" and HAS_GUI:
+            return "gui"
         elif choice == "0":
             return "exit"
         else:
@@ -166,9 +183,7 @@ def select_dataset_type():
 
 
 def train_with_options():
-    """
-    提供训练选项并执行训练
-    """
+    """提供训练选项并执行训练"""
     print_header("Model Training")
     
     # 选择数据集类型
@@ -217,11 +232,43 @@ def train_with_options():
             except ValueError:
                 print(f"Invalid input, will use all {total_cores} cores")
                 cpu_cores = total_cores
+    else:
+        # 顺序处理模式使用单核
+        cpu_cores = 1
+        print("Sequential processing will use a single CPU core")
     
     # 设置环境变量
     if processing_mode == "parallel" and cpu_cores is not None:
         os.environ['OMP_NUM_THREADS'] = str(cpu_cores)
         print(f"Setting parallel processing threads to: {cpu_cores}")
+    
+    # 选择是否使用早停机制
+    print("\nWould you like to enable early stopping? (y/n)")
+    print("Early stopping will automatically stop training when performance stops improving.")
+    early_stopping = True
+    patience = 10
+    
+    es_choice = input("\n> ").strip().lower()
+    if es_choice == 'n' or es_choice == 'no':
+        early_stopping = False
+        print("Early stopping disabled. Training will run for the full number of epochs.")
+    else:
+        print("\nPlease enter patience value (number of epochs with no improvement before stopping):")
+        print("Default is 10. Higher values give the model more chances to improve.")
+        
+        patience_input = input("\n> ").strip()
+        if patience_input:
+            try:
+                patience = int(patience_input)
+                if patience < 1:
+                    patience = 10
+                    print(f"Invalid value. Using default patience of {patience}")
+                else:
+                    print(f"Using patience value of {patience}")
+            except ValueError:
+                print(f"Invalid input. Using default patience of {patience}")
+        else:
+            print(f"Using default patience of {patience}")
     
     # 确认训练设置
     print("\nTraining Settings:")
@@ -233,8 +280,8 @@ def train_with_options():
         print(f"  Training set directory: {Config.train_data_dir}")
         print(f"  Validation set directory: {Config.val_data_dir}")
     print(f"  Processing mode: {'Parallel' if processing_mode == 'parallel' else 'Sequential'}")
-    if processing_mode == "parallel":
-        print(f"  CPU cores: {cpu_cores}")
+    print(f"  CPU cores: {cpu_cores}")
+    print(f"  Early stopping: {'Enabled (patience=' + str(patience) + ')' if early_stopping else 'Disabled'}")
     print(f"  Training epochs: {Config.num_epochs}")
     print(f"  Batch size: {Config.batch_size}")
     print(f"  Learning rate: {Config.learning_rate}")
@@ -250,24 +297,27 @@ def train_with_options():
     start_time = time.time()
     
     try:
-        # 如果是顺序处理，将核心数设为1
-        if processing_mode == "sequential":
-            cpu_cores = 1
-            
-        # 调用训练函数，传递CPU核心数和数据集信息
+        # 调用训练函数，传递CPU核心数、数据集信息和早停设置
         train_model(
             num_workers=cpu_cores,
             use_mindrecord=use_mindrecord,
             train_mindrecord=train_file,
-            val_mindrecord=val_file
+            val_mindrecord=val_file,
+            early_stopping=early_stopping,
+            patience=patience
         )
         
         end_time = time.time()
         training_time = end_time - start_time
-        print(f"\nTraining completed! Time used: {training_time:.2f} seconds")
+        hours, remainder = divmod(training_time, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        print(f"\nTraining completed! Total time: {int(hours)} hours {int(minutes)} minutes {seconds:.2f} seconds")
         print(f"Model saved to: {Config.best_model_path}")
     except Exception as e:
         print(f"\nError during training: {str(e)}")
+        import traceback
+        traceback.print_exc()
 
 
 def detect_with_options():
@@ -402,10 +452,33 @@ def detect_with_options():
                 print(f"{class_name}: {count} images ({percentage:.1f}%)")
 
 
+def launch_gui():
+    """启动图形用户界面"""
+    if not HAS_GUI:
+        print("PyQt5 is not installed. Cannot launch graphical interface.")
+        print("Please install PyQt5 with: pip install PyQt5")
+        return
+    
+    # 检查模型是否存在
+    if not check_model_exists():
+        print("Warning: No model found. The GUI will still launch but recognition will not work.")
+    
+    print("Launching graphical interface...")
+    app = QApplication(sys.argv)
+    window = EWasteRecognitionUI()
+    window.show()
+    sys.exit(app.exec_())
+
+
 def main():
     """
     主函数
     """
+    # 如果命令行参数中有--gui，直接启动图形界面
+    if len(sys.argv) > 1 and sys.argv[1] == '--gui' and HAS_GUI:
+        launch_gui()
+        return
+    
     # 检查数据集和模型是否存在
     train_files, val_files, _ = find_mindrecord_files("./datasets")
     has_mindrecord = bool(train_files and val_files)
@@ -454,6 +527,9 @@ def main():
             train_with_options()
         elif action == "detect":
             detect_with_options()
+        elif action == "gui":
+            launch_gui()
+            return  # GUI接管了程序控制，不需要返回主循环
 
 
 if __name__ == "__main__":
