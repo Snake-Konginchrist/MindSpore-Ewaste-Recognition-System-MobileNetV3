@@ -1,0 +1,81 @@
+# Python 相关
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# 数据集目录
+datasets/
+testsets/
+*_datasets/
+*_testsets/
+*_datasets_png/
+splitted_dataset/
+
+# TFRecord 文件
+*.tfrecord
+
+# MindRecord 文件
+*.mindrecord
+
+# 常见的大型数据文件格式
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.npy
+*.npz
+
+# 图像文件
+*.jpg
+*.jpeg
+*.png
+*.bmp
+*.tif
+*.tiff
+*.gif
+
+# 模型文件
+*.model
+*.weights
+*.pb
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.h5
+saved_model/
+checkpoints/
+
+# 日志和临时文件
+logs/
+*.log
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 环境相关
+.env
+.venv
+venv/
+ENV/
+.ipynb_checkpoints/ 
