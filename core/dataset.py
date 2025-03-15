@@ -6,6 +6,7 @@ import mindspore.dataset as ds
 import mindspore.dataset.vision as vision
 import mindspore.dataset.transforms as transforms
 from mindspore.dataset.vision import Inter
+from mindspore import dtype as mstype
 from PIL import Image
 import numpy as np
 
@@ -132,54 +133,91 @@ def create_dataset_from_mindrecord(mindrecord_file, config, is_train=True, shuff
     if num_workers is None:
         num_workers = config.num_workers
     
-    # 从MindRecord文件创建数据集
-    dataset = ds.MindDataset(
-        dataset_files=mindrecord_file,
-        columns_list=["image", "label"],
-        shuffle=shuffle,
-        num_parallel_workers=num_workers
-    )
-    
-    # 解码图像
-    decode_op = vision.Decode()
-    dataset = dataset.map(
-        operations=decode_op,
-        input_columns=["image"],
-        num_parallel_workers=num_workers
-    )
-    
-    # 数据增强和预处理
-    transform_list = []
-    
-    # 训练集数据增强
-    if is_train:
-        if config.random_crop:
+    try:
+        # 从MindRecord文件创建数据集
+        dataset = ds.MindDataset(
+            dataset_files=mindrecord_file,
+            columns_list=["image", "label"],
+            shuffle=shuffle,
+            num_parallel_workers=num_workers
+        )
+        
+        # 打印数据集信息
+        print(f"MindDataset created successfully from {mindrecord_file}")
+        print(f"Dataset size: {dataset.get_dataset_size()}")
+        
+        # 解码图像
+        decode_op = vision.Decode()
+        dataset = dataset.map(
+            operations=decode_op,
+            input_columns=["image"],
+            num_parallel_workers=num_workers
+        )
+        
+        # 确保标签是标量而不是元组 - 使用更直接的方式
+        # 定义一个Python函数来处理标签
+        def ensure_scalar_label(label):
+            """确保标签是标量"""
+            if isinstance(label, (tuple, list)):
+                return np.array(label[0], dtype=np.int32)
+            return np.array(label, dtype=np.int32)
+        
+        # 使用Python函数处理标签
+        dataset = dataset.map(
+            operations=ensure_scalar_label,
+            input_columns=["label"],
+            output_columns=["label"],
+            python_multiprocessing=False,  # 避免多进程可能导致的问题
+            num_parallel_workers=1  # 使用单线程处理标签
+        )
+        
+        # 使用TypeCast确保数据类型正确
+        type_cast_op = transforms.TypeCast(mstype.int32)
+        dataset = dataset.map(
+            operations=type_cast_op,
+            input_columns=["label"],
+            num_parallel_workers=num_workers
+        )
+        
+        # 数据增强和预处理
+        transform_list = []
+        
+        # 训练集数据增强
+        if is_train:
+            if config.random_crop:
+                transform_list.extend([
+                    vision.Resize((256, 256), Inter.BILINEAR),
+                    vision.RandomCrop((config.image_size, config.image_size)),
+                    vision.RandomHorizontalFlip(prob=0.5)
+                ])
+        else:
             transform_list.extend([
-                vision.Resize((256, 256), Inter.BILINEAR),
-                vision.RandomCrop((config.image_size, config.image_size)),
-                vision.RandomHorizontalFlip(prob=0.5)
+                vision.Resize((config.image_size, config.image_size), Inter.BILINEAR)
             ])
-    else:
+        
+        # 通用预处理
         transform_list.extend([
-            vision.Resize((config.image_size, config.image_size), Inter.BILINEAR)
+            vision.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            vision.HWC2CHW()
         ])
-    
-    # 通用预处理
-    transform_list.extend([
-        vision.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        vision.HWC2CHW()
-    ])
-    
-    dataset = dataset.map(
-        operations=transform_list,
-        input_columns="image",
-        num_parallel_workers=num_workers
-    )
-    
-    # 设置批量大小
-    dataset = dataset.batch(config.batch_size, drop_remainder=True)
-    
-    return dataset
+        
+        dataset = dataset.map(
+            operations=transform_list,
+            input_columns="image",
+            num_parallel_workers=num_workers
+        )
+        
+        # 设置批量大小
+        dataset = dataset.batch(config.batch_size, drop_remainder=True)
+        
+        print(f"Dataset preprocessing completed successfully")
+        return dataset
+        
+    except Exception as e:
+        print(f"Error creating dataset from MindRecord: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def find_mindrecord_files(data_dir="./datasets"):

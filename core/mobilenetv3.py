@@ -5,6 +5,7 @@ import mindspore.nn as nn
 import mindspore.ops as ops
 from mindspore.common.initializer import TruncatedNormal
 import mindspore as ms
+import numpy as np
 
 def _make_divisible(v, divisor, min_value=None):
     """确保通道数是8的倍数"""
@@ -91,10 +92,25 @@ class InvertedResidual(nn.Cell):
         return self.conv(x)
 
 class MobileNetV3(nn.Cell):
-    """MobileNetV3网络"""
-    def __init__(self, num_classes=1000, width_mult=1.0, mode='large'):
+    """
+    MobileNetV3 网络结构
+    
+    Args:
+        num_classes: 分类数量
+        width_mult: 宽度乘数，用于调整网络大小
+        mode: 'small' 或 'large'，选择MobileNetV3的版本
+    """
+    def __init__(self, num_classes=1000, width_mult=1.0, mode='small'):
         super(MobileNetV3, self).__init__()
-        # 设置网络结构配置
+        
+        # 设置平均池化的轴
+        self.axis = (2, 3)  # 在H和W维度上进行平均池化
+        
+        # 设置输入通道数和最后一个通道数
+        input_channel = 16
+        last_channel = 1280
+        
+        # 根据模式选择不同的网络结构
         if mode == 'large':
             # kernel_size, exp_size, out_channels, use_SE, use_HS, stride
             self.cfgs = [
@@ -160,7 +176,6 @@ class MobileNetV3(nn.Cell):
         ])
 
         self.avgpool = ops.ReduceMean(keep_dims=True)
-        self.axis = (2, 3)  # 单独定义轴参数
         
         self.classifier = nn.SequentialCell([
             nn.Dense(final_conv_out, num_classes),
@@ -172,30 +187,57 @@ class MobileNetV3(nn.Cell):
         x = self.conv_stem(x)
         x = self.blocks(x)
         x = self.conv_head(x)
-        x = self.avgpool(x, self.axis)
+        x = self.avgpool(x, self.axis)  # 使用类属性axis
         x = x.view(x.shape[0], -1)
         x = self.classifier(x)
         return x
 
     def _initialize_weights(self):
         """初始化模型权重"""
-        weight_init = TruncatedNormal(0.02)
-        for _, cell in self.cells_and_names():
-            if isinstance(cell, nn.Conv2d):
-                weight_shape = cell.weight.shape
-                weight_init_tensor = weight_init(weight_shape)
-                cell.weight.set_data(weight_init_tensor)
-                if cell.bias is not None:
-                    bias_shape = cell.bias.shape
-                    bias_init = TruncatedNormal(0.02)
-                    bias_init_tensor = bias_init(bias_shape)
-                    cell.bias.set_data(bias_init_tensor)
-            elif isinstance(cell, nn.Dense):
-                weight_shape = cell.weight.shape
-                weight_init_tensor = weight_init(weight_shape)
-                cell.weight.set_data(weight_init_tensor)
-                if cell.bias is not None:
-                    bias_shape = cell.bias.shape
-                    bias_init = TruncatedNormal(0.02)
-                    bias_init_tensor = bias_init(bias_shape)
-                    cell.bias.set_data(bias_init_tensor) 
+        for name, cell in self.cells_and_names():
+            try:
+                if isinstance(cell, nn.Conv2d):
+                    # 使用默认初始化方式
+                    cell.weight.set_data(
+                        ms.common.initializer.initializer(
+                            'TruncatedNormal', 
+                            cell.weight.shape,
+                            ms.float32
+                        )
+                    )
+                    
+                    if cell.bias is not None:
+                        cell.bias.set_data(
+                            ms.common.initializer.initializer(
+                                'TruncatedNormal',
+                                cell.bias.shape,
+                                ms.float32
+                            )
+                        )
+                
+                elif isinstance(cell, nn.Dense):
+                    # 使用默认初始化方式
+                    cell.weight.set_data(
+                        ms.common.initializer.initializer(
+                            'TruncatedNormal', 
+                            cell.weight.shape,
+                            ms.float32
+                        )
+                    )
+                    
+                    if cell.bias is not None:
+                        cell.bias.set_data(
+                            ms.common.initializer.initializer(
+                                'TruncatedNormal',
+                                cell.bias.shape,
+                                ms.float32
+                            )
+                        )
+            
+            except Exception as e:
+                print(f"Error initializing weights for {name}: {str(e)}")
+                print(f"Cell type: {type(cell)}")
+                if hasattr(cell, 'weight'):
+                    print(f"Weight shape type: {type(cell.weight.shape)}")
+                    print(f"Weight shape: {cell.weight.shape}")
+                raise 

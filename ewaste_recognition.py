@@ -16,13 +16,13 @@ from mindspore import context
 # 添加项目根目录到Python路径
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-# 导入项目模块
-from train.train import train_model
-from eval.evaluate import Predictor
-from config.config import Config
+# 导入项目模块 - 修改导入路径，适应新的文件结构
+from core.train import train_model
+from core.evaluate import Predictor
+from core.config import Config
 from data_processing.utils.user_interface import select_processing_mode, select_cpu_cores
 from data_processing.core.dataset_processor import discover_categories
-from utils.dataset import find_mindrecord_files
+from core.dataset import find_mindrecord_files
 
 
 def print_header(title):
@@ -78,67 +78,91 @@ def select_dataset_type():
             val_file: 验证集文件路径
     """
     print("\nPlease select dataset type:")
-    print("1. Use original image folders (default)")
-    print("2. Use preprocessed MindRecord dataset")
+    print("1. Use preprocessed MindRecord dataset (default)")
+    print("2. Use original image folders")
     print("0. Return to main menu")
     
     choice = input("\n> ").strip()
     if choice == "0":
         return None, None, None
     
-    # 使用原始图像文件夹
+    # 默认使用MindRecord数据集
     if choice != "2":
-        return False, None, None
-    
-    # 使用MindRecord数据集
-    # 查找可用的MindRecord文件
-    train_files, val_files, test_files = find_mindrecord_files("./datasets")
-    
-    if not train_files or not val_files:
-        print("\nError: No available MindRecord dataset files found")
-        print("Please generate MindRecord datasets first, or choose to use original image folders")
-        return False, None, None
-    
-    # 显示可用的训练集文件
-    print("\nAvailable training set files:")
-    for i, file_path in enumerate(train_files, 1):
-        file_name = os.path.basename(file_path)
-        print(f"{i}. {file_name}")
-    
-    # 选择训练集文件
-    print("\nPlease select a training set file (enter number):")
-    train_choice = input("> ").strip()
-    try:
-        train_idx = int(train_choice) - 1
-        if train_idx < 0 or train_idx >= len(train_files):
-            print("Invalid selection, will use the first training set file")
+        # 使用MindRecord数据集
+        # 查找可用的MindRecord文件
+        train_files, val_files, test_files = find_mindrecord_files("./datasets")
+        
+        if not train_files or not val_files:
+            print("\nError: No available MindRecord dataset files found")
+            print("Would you like to create MindRecord datasets now? (y/n)")
+            create_choice = input("> ").strip().lower()
+            
+            if create_choice == 'y' or create_choice == 'yes':
+                # 导入数据处理模块
+                try:
+                    from data_processing.main import main as process_dataset
+                    print("\nStarting dataset processing...")
+                    process_dataset()
+                    print("\nDataset processing completed. Checking for new MindRecord files...")
+                    
+                    # 重新检查MindRecord文件
+                    train_files, val_files, test_files = find_mindrecord_files("./datasets")
+                    if not train_files or not val_files:
+                        print("\nStill no MindRecord files found after processing.")
+                        print("Please check your dataset directory and try again.")
+                        print("Falling back to using original image folders.")
+                        return False, None, None
+                except Exception as e:
+                    print(f"\nError during dataset processing: {str(e)}")
+                    print("Falling back to using original image folders.")
+                    return False, None, None
+            else:
+                print("Falling back to using original image folders.")
+                return False, None, None
+        
+        # 显示可用的训练集文件
+        print("\nAvailable training set files:")
+        for i, file_path in enumerate(train_files, 1):
+            file_name = os.path.basename(file_path)
+            print(f"{i}. {file_name}")
+        
+        # 选择训练集文件
+        print("\nPlease select a training set file (enter number):")
+        train_choice = input("> ").strip()
+        try:
+            train_idx = int(train_choice) - 1
+            if train_idx < 0 or train_idx >= len(train_files):
+                print("Invalid selection, will use the first training set file")
+                train_idx = 0
+        except ValueError:
+            print("Invalid input, will use the first training set file")
             train_idx = 0
-    except ValueError:
-        print("Invalid input, will use the first training set file")
-        train_idx = 0
-    
-    train_file = train_files[train_idx]
-    
-    # 查找对应的验证集文件
-    train_basename = os.path.basename(train_file)
-    val_basename = train_basename.replace("_train", "_val")
-    val_file = None
-    
-    for file_path in val_files:
-        if os.path.basename(file_path) == val_basename:
-            val_file = file_path
-            break
-    
-    # 如果找不到对应的验证集文件，使用第一个验证集文件
-    if val_file is None:
-        print("\nNo corresponding validation set file found, will use the first validation set file")
-        val_file = val_files[0]
-    
-    print(f"\nSelected dataset:")
-    print(f"  Training set: {os.path.basename(train_file)}")
-    print(f"  Validation set: {os.path.basename(val_file)}")
-    
-    return True, train_file, val_file
+        
+        train_file = train_files[train_idx]
+        
+        # 查找对应的验证集文件
+        train_basename = os.path.basename(train_file)
+        val_basename = train_basename.replace("_train", "_val")
+        val_file = None
+        
+        for file_path in val_files:
+            if os.path.basename(file_path) == val_basename:
+                val_file = file_path
+                break
+        
+        # 如果找不到对应的验证集文件，使用第一个验证集文件
+        if val_file is None:
+            print("\nNo corresponding validation set file found, will use the first validation set file")
+            val_file = val_files[0]
+        
+        print(f"\nSelected dataset:")
+        print(f"  Training set: {os.path.basename(train_file)}")
+        print(f"  Validation set: {os.path.basename(val_file)}")
+        
+        return True, train_file, val_file
+    else:
+        # 使用原始图像文件夹
+        return False, None, None
 
 
 def train_with_options():
@@ -260,6 +284,23 @@ def detect_with_options():
         print("\nTrain a model now? (y/n)")
         choice = input("> ").strip().lower()
         if choice == 'y' or choice == 'yes':
+            # 检查是否有MindRecord数据集
+            train_files, val_files, _ = find_mindrecord_files("./datasets")
+            if not train_files or not val_files:
+                print("\nNo MindRecord dataset files found.")
+                print("Would you like to create MindRecord datasets first? (y/n)")
+                dataset_choice = input("> ").strip().lower()
+                
+                if dataset_choice == 'y' or dataset_choice == 'yes':
+                    try:
+                        from data_processing.main import main as process_dataset
+                        print("\nStarting dataset processing...")
+                        process_dataset()
+                        print("\nDataset processing completed.")
+                    except Exception as e:
+                        print(f"\nError during dataset processing: {str(e)}")
+                        print("Continuing with training using original image folders.")
+            
             train_with_options()
             # 训练后再次检查模型
             if not check_model_exists():
@@ -365,6 +406,44 @@ def main():
     """
     主函数
     """
+    # 检查数据集和模型是否存在
+    train_files, val_files, _ = find_mindrecord_files("./datasets")
+    has_mindrecord = bool(train_files and val_files)
+    has_model = check_model_exists()
+    
+    # 如果既没有数据集也没有模型，提示用户初始化系统
+    if not has_mindrecord and not has_model:
+        print_header("E-Waste Recognition System - First Run Setup")
+        print("\nWelcome to the E-Waste Recognition System!")
+        print("It seems this is your first time running the system.")
+        print("To get started, you need to:")
+        print("1. Create a dataset (convert images to MindRecord format)")
+        print("2. Train a model using the dataset")
+        
+        print("\nWould you like to set up the system now? (y/n)")
+        setup_choice = input("> ").strip().lower()
+        
+        if setup_choice == 'y' or setup_choice == 'yes':
+            # 创建数据集
+            print("\nStep 1: Creating dataset")
+            try:
+                from data_processing.main import main as process_dataset
+                process_dataset()
+                print("\nDataset creation completed.")
+            except Exception as e:
+                print(f"\nError during dataset creation: {str(e)}")
+                print("You can try again later by selecting 'Train New Model' from the main menu.")
+            
+            # 训练模型
+            print("\nStep 2: Training model")
+            train_with_options()
+            
+            if check_model_exists():
+                print("\nSetup completed successfully! You can now use the system to recognize e-waste.")
+            else:
+                print("\nModel training was not completed. You can try again later from the main menu.")
+    
+    # 主循环
     while True:
         action = select_action()
         

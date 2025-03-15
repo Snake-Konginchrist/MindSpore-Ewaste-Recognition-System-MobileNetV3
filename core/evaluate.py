@@ -10,8 +10,9 @@ from mindspore import load_checkpoint, load_param_into_net
 import mindspore.dataset.vision as vision
 from mindspore.dataset.vision import Inter
 
-from models.mobilenetv3 import MobileNetV3
-from config.config import Config
+# 修改导入路径，适应新的文件结构
+from core.mobilenetv3 import MobileNetV3
+from core.config import Config
 
 class Predictor:
     """预测类"""
@@ -22,7 +23,8 @@ class Predictor:
             checkpoint_path: 模型检查点路径
         """
         # 设置运行环境
-        context.set_context(mode=context.GRAPH_MODE, device_target=Config.device_target)
+        context.set_context(mode=context.GRAPH_MODE)
+        ms.set_device(Config.device_target)
         
         # 创建模型
         self.network = MobileNetV3(

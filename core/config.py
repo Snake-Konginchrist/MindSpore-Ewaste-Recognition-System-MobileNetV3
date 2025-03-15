@@ -4,7 +4,7 @@
 
 class Config:
     # 数据集配置
-    num_classes = 12  # 电子垃圾类别数量
+    num_classes = 11  # 电子垃圾类别数量
     image_size = 224  # 输入图像大小
     batch_size = 32
     num_workers = 4

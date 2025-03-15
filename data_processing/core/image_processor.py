@@ -68,6 +68,17 @@ def process_image_for_parallel(args):
         img_bytes = process_image(image_path)
         if img_bytes is None:
             return None
+        
+        # 确保标签是整数而不是元组
+        if isinstance(label_id, tuple):
+            print(f"Warning: label_id is a tuple {label_id} for {image_path}, converting to int")
+            label_id = label_id[0] if label_id else 0
+        elif not isinstance(label_id, int):
+            print(f"Warning: label_id is not an int ({type(label_id)}) for {image_path}, converting to int")
+            label_id = int(label_id) if label_id is not None else 0
+        
+        # 打印调试信息
+        print(f"Processed image: {image_path}, label: {label_id} (type: {type(label_id)})")
             
         return {
             "image": img_bytes,
@@ -76,4 +87,6 @@ def process_image_for_parallel(args):
         }
     except Exception as e:
         print(f"Error in parallel processing for {image_path}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None 
