@@ -12,6 +12,7 @@ from mindspore.common import set_seed
 import numpy as np
 import time
 import multiprocessing
+import shutil
 
 # 修改导入路径，适应新的文件结构
 from core.mobilenetv3 import MobileNetV3
@@ -110,6 +111,7 @@ class ValidationCallback(Callback):
         self.early_stop_cb = early_stop_cb
         self.best_acc = 0.0
         self.best_epoch = 0
+        self.best_ckpt_path = None
     
     def on_epoch_end(self, run_context):
         cb_params = run_context.original_args()
@@ -118,11 +120,22 @@ class ValidationCallback(Callback):
         metrics = self.model.eval(self.val_dataset)
         print(f"Validation Accuracy: {metrics['acc']:.4f}")
         
-        # 记录最佳精度
+        # 记录最佳精度并保存最佳模型
         if metrics['acc'] > self.best_acc:
             self.best_acc = metrics['acc']
             self.best_epoch = epoch
             print(f"New best accuracy: {self.best_acc:.4f}")
+            
+            # 保存当前最佳模型
+            current_ckpt = os.path.join(Config.model_save_dir, f"mobilenetv3-{epoch}_{cb_params.batch_num}.ckpt")
+            if os.path.exists(current_ckpt):
+                self.best_ckpt_path = current_ckpt
+                # 立即复制为best_model.ckpt
+                try:
+                    shutil.copy(current_ckpt, Config.best_model_path)
+                    print(f"Best model saved to {Config.best_model_path}")
+                except Exception as e:
+                    print(f"Failed to save best model: {e}")
         
         # 手动触发早停回调
         if self.early_stop_cb:
@@ -136,6 +149,16 @@ class ValidationCallback(Callback):
             # 检查是否请求停止
             if hasattr(early_stop_context, '_is_stop') and early_stop_context._is_stop:
                 run_context.request_stop()
+    
+    def on_train_end(self, run_context):
+        """训练结束时确保最佳模型已保存"""
+        if self.best_ckpt_path and os.path.exists(self.best_ckpt_path):
+            try:
+                # 再次确保最佳模型被保存为best_model.ckpt
+                shutil.copy(self.best_ckpt_path, Config.best_model_path)
+                print(f"\nTraining completed. Best model (epoch {self.best_epoch}, accuracy {self.best_acc:.4f}) saved to {Config.best_model_path}")
+            except Exception as e:
+                print(f"Failed to save best model at training end: {e}")
 
 def check_dataset(dataset, name="dataset"):
     """
@@ -392,6 +415,7 @@ def train_model(num_workers=None, use_mindrecord=False, train_mindrecord=None, v
         print(f"  Learning rate: {Config.learning_rate}")
         print(f"  Epochs: {Config.num_epochs}")
         print(f"  Early stopping: {'Enabled' if early_stopping else 'Disabled'}")
+        print(f"  Best model will be saved to: {Config.best_model_path}")
         
         # 开始训练
         print("\nStarting model training...")
@@ -407,13 +431,18 @@ def train_model(num_workers=None, use_mindrecord=False, train_mindrecord=None, v
         metrics = model.eval(val_dataset)
         print(f"Final validation accuracy: {metrics['acc']:.4f}")
         
-        # 保存最佳模型
-        best_ckpt = os.path.join(Config.model_save_dir, "mobilenetv3-final.ckpt")
-        if os.path.exists(best_ckpt):
-            # 复制最终检查点作为最佳模型
-            import shutil
-            shutil.copy(best_ckpt, Config.best_model_path)
-            print(f"Best model saved to {Config.best_model_path}")
+        # 如果训练过程中没有保存最佳模型，则在这里保存
+        if not os.path.exists(Config.best_model_path) or val_cb.best_ckpt_path is None:
+            # 查找最新的检查点
+            ckpt_files = [f for f in os.listdir(Config.model_save_dir) if f.endswith('.ckpt')]
+            if ckpt_files:
+                # 按修改时间排序，获取最新的检查点
+                latest_ckpt = sorted(ckpt_files, key=lambda x: os.path.getmtime(os.path.join(Config.model_save_dir, x)))[-1]
+                latest_ckpt_path = os.path.join(Config.model_save_dir, latest_ckpt)
+                
+                # 复制为最佳模型
+                shutil.copy(latest_ckpt_path, Config.best_model_path)
+                print(f"Latest model checkpoint {latest_ckpt} saved as best model to {Config.best_model_path}")
         
         # 计算并打印总用时
         end_time = time.time()
@@ -426,6 +455,7 @@ def train_model(num_workers=None, use_mindrecord=False, train_mindrecord=None, v
         print(f"Total time: {int(hours)} hours {int(minutes)} minutes {seconds:.2f} seconds")
         print(f"Number of epochs: {Config.num_epochs}")
         print(f"Best validation accuracy: {val_cb.best_acc:.4f} (epoch {val_cb.best_epoch})")
+        print(f"Best model saved to: {Config.best_model_path}")
         print(f"CPU cores used: {actual_workers}")
         print("="*50 + "\n")
         

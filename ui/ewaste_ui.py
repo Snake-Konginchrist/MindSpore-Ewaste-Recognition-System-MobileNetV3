@@ -9,8 +9,8 @@ import os
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, 
                             QVBoxLayout, QHBoxLayout, QWidget, QFileDialog,
-                            QFrame, QSplitter, QSizePolicy)
-from PyQt5.QtCore import Qt, QMimeData, QSize
+                            QFrame, QSplitter, QSizePolicy, QMessageBox)
+from PyQt5.QtCore import Qt, QMimeData, QSize, pyqtSignal
 from PyQt5.QtGui import QPixmap, QFont, QDrag, QDragEnterEvent, QDropEvent, QPalette, QColor
 
 # 添加项目根目录到Python路径
@@ -27,6 +27,9 @@ class DropArea(QLabel):
     """
     可拖拽区域组件
     """
+    # 添加自定义信号
+    image_loaded_signal = pyqtSignal(str)
+    
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
@@ -95,6 +98,8 @@ class DropArea(QLabel):
                 file_path = url.toLocalFile()
                 if self.is_valid_image(file_path):
                     self.load_image(file_path)
+                    # 发送信号而不是直接调用方法
+                    self.image_loaded_signal.emit(file_path)
                     break
         
         self.setStyleSheet("""
@@ -120,6 +125,8 @@ class DropArea(QLabel):
         
         if file_path and self.is_valid_image(file_path):
             self.load_image(file_path)
+            # 发送信号而不是直接调用方法
+            self.image_loaded_signal.emit(file_path)
     
     def is_valid_image(self, file_path):
         """检查文件是否为有效图像"""
@@ -142,10 +149,6 @@ class DropArea(QLabel):
         
         self.setPixmap(pixmap)
         self.setAlignment(Qt.AlignCenter)
-        
-        # 通知父窗口图像已加载
-        if hasattr(self.parent(), 'on_image_loaded'):
-            self.parent().on_image_loaded(file_path)
 
 
 class ResultDisplay(QFrame):
@@ -244,8 +247,12 @@ class EWasteRecognitionUI(QMainWindow):
         # 创建拖拽区域和结果显示区域
         content_layout = QHBoxLayout()
         
-        self.drop_area = DropArea()
-        self.result_display = ResultDisplay()
+        # 创建拖拽区域和结果显示区域
+        self.drop_area = DropArea(self)  # 直接设置父窗口为self
+        self.result_display = ResultDisplay(self)  # 直接设置父窗口为self
+        
+        # 连接信号
+        self.drop_area.image_loaded_signal.connect(self.on_image_loaded)
         
         # 使用分割器
         splitter = QSplitter(Qt.Horizontal)
@@ -268,9 +275,14 @@ class EWasteRecognitionUI(QMainWindow):
         self.clear_button = QPushButton("Clear")
         self.clear_button.clicked.connect(self.clear_all)
         
+        # 添加调试按钮
+        self.debug_button = QPushButton("Debug Info")
+        self.debug_button.clicked.connect(self.show_debug_info)
+        
         button_layout.addWidget(self.select_button)
         button_layout.addWidget(self.recognize_button)
         button_layout.addWidget(self.clear_button)
+        button_layout.addWidget(self.debug_button)
         
         # 添加到主布局
         main_layout.addWidget(title_label)
@@ -288,10 +300,17 @@ class EWasteRecognitionUI(QMainWindow):
         """加载模型"""
         self.statusBar().showMessage("Loading model...")
         try:
+            # 检查模型文件是否存在
+            if not os.path.exists(Config.best_model_path):
+                self.statusBar().showMessage(f"Model file not found: {Config.best_model_path}")
+                return
+                
             self.predictor = Predictor(Config.best_model_path)
             self.statusBar().showMessage("Model loaded successfully")
         except Exception as e:
             self.statusBar().showMessage(f"Failed to load model: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def select_image(self):
         """选择图像"""
@@ -302,11 +321,16 @@ class EWasteRecognitionUI(QMainWindow):
         
         if file_path and os.path.exists(file_path):
             self.drop_area.load_image(file_path)
+            self.on_image_loaded(file_path)
     
     def on_image_loaded(self, image_path):
         """图像加载完成的回调"""
+        print(f"Image loaded: {image_path}")  # 调试信息
         self.recognize_button.setEnabled(True)
         self.statusBar().showMessage(f"Image loaded: {os.path.basename(image_path)}")
+        
+        # 显示确认对话框
+        # QMessageBox.information(self, "Image Loaded", f"Image loaded successfully: {os.path.basename(image_path)}\nRecognize button should now be enabled.")
     
     def recognize_image(self):
         """识别图像"""
@@ -329,6 +353,8 @@ class EWasteRecognitionUI(QMainWindow):
             self.statusBar().showMessage(f"Recognition complete: {class_name} ({probability:.2%})")
         except Exception as e:
             self.statusBar().showMessage(f"Recognition failed: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def clear_all(self):
         """清除所有内容"""
@@ -338,6 +364,23 @@ class EWasteRecognitionUI(QMainWindow):
         self.result_display.clear_result()
         self.recognize_button.setEnabled(False)
         self.statusBar().showMessage("Ready")
+    
+    def show_debug_info(self):
+        """显示调试信息"""
+        debug_info = f"""
+        Debug Information:
+        
+        Model Path: {Config.best_model_path}
+        Model File Exists: {os.path.exists(Config.best_model_path)}
+        Model Loaded: {self.predictor is not None}
+        
+        Image Path: {self.drop_area.image_path if self.drop_area.image_path else 'None'}
+        Image File Exists: {os.path.exists(self.drop_area.image_path) if self.drop_area.image_path else 'N/A'}
+        
+        Recognize Button Enabled: {self.recognize_button.isEnabled()}
+        """
+        
+        QMessageBox.information(self, "Debug Information", debug_info)
 
 
 def main():
