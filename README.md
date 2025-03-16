@@ -427,4 +427,12 @@ MobileNetV3 是 Google 提出的移动端神经网络架构，本项目使用其
 
 1. Howard, A., et al. (2019). "Searching for MobileNetV3." arXiv preprint arXiv:1905.02244.
 2. Sandler, M., et al. (2018). "MobileNetV2: Inverted Residuals and Linear Bottlenecks." CVPR 2018.
-3. Hu, J., et al. (2018). "Squeeze-and-Excitation Networks." CVPR 2018. 
+3. Hu, J., et al. (2018). "Squeeze-and-Excitation Networks." CVPR 2018.
+
+## 许可证
+
+本项目采用Apache License 2.0进行许可。您可以在以下链接查看完整的许可证文本：
+
+[Apache License 2.0](http://www.apache.org/licenses/LICENSE-2.0)
+
+根据该许可证，您可以自由使用、修改和分发本项目的代码，但需遵循许可证中的条款和条件。 
