@@ -61,7 +61,6 @@ splitted_dataset/
 *.tflite
 *.h5
 saved_model/
-checkpoints/
 
 # 日志和临时文件
 logs/
