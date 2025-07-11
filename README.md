@@ -120,6 +120,10 @@ python ewaste_recognition.py --gui
 
 欢迎提交 Issue 和 Pull Request 来改进项目。
 
+## 交流群
+- **彩旗开源交流QQ群**: 1022820973
+- 欢迎加入群聊，与开发者交流技术问题和使用心得
+
 ## 参考文献
 
 1. Howard, A., et al. (2019). "Searching for MobileNetV3." arXiv preprint arXiv:1905.02244.
