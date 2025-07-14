@@ -24,16 +24,40 @@
 
 ### 环境要求
 
-- Python 3.7+
-- MindSpore 2.2.0+
+- Python 3.11
+- MindSpore 2.6.0
 - PyQt5 (用于图形界面)
 - CUDA 支持（可选，用于 GPU 加速）
 
 ### 安装依赖
 
+#### 方式一：使用 pip（推荐）
 ```bash
 pip install -r requirements.txt
 ```
+
+#### 方式二：使用 UV 包管理器（更快）
+
+**安装 UV：**
+
+**macOS/Linux：**
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**Windows：**
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+**安装项目依赖：**
+```bash
+uv sync
+```
+
+> **UV 优势**：更快的依赖解析和安装速度，自动管理虚拟环境，支持依赖锁定。
+> 
+> 详细使用说明请参考：[UV 使用指南](UV_USAGE.md)
 
 ### 数据准备
 
@@ -56,12 +80,23 @@ pip install -r requirements.txt
 ### 使用方式
 
 #### 命令行界面
+
+##### 使用 pip 安装的依赖
 ```bash
 # 启动主程序
 python ewaste_recognition.py
 
 # 启动图形界面
 python ewaste_recognition.py --gui
+```
+
+##### 使用 UV 安装的依赖
+```bash
+# 启动主程序
+uv run ewaste_recognition.py
+
+# 启动图形界面
+uv run ewaste_recognition.py --gui
 ```
 
 #### 图形界面功能
