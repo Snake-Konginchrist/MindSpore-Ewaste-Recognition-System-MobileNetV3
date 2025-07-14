@@ -1,0 +1,31 @@
+[project]
+name = "mindspore-ewaste-recognition-system"
+version = "1.0.0"
+description = "基于MindSpore和MobileNetV3的电子废物识别系统"
+requires-python = ">=3.9,<3.12"
+dependencies = [
+    "mindspore>=2.6.0",
+    "numpy>=1.26.4",
+    "Pillow>=11.3.0",
+    "tqdm>=4.67.1",
+    "opencv-python>=4.11.0.86",
+    "PyQt5>=5.15.11",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+] 
+
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple" 
+
+[tool.hatch.build.targets.wheel]
+packages = ["core", "data_processing", "image_preprocessing", "ui"] 
